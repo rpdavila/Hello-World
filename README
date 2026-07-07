@@ -1,1 +1,42 @@
-Hello World!
+# Azure VM Automated Deployment Pipeline
+
+A lightweight, automated CI/CD pipeline using **GitHub Actions** to securely deploy a static web application (`index.html`) to an Ubuntu Virtual Machine on Microsoft Azure. The architecture leverages a single-tier firewall configuration at the subnet level and an Nginx reverse proxy routing traffic to an isolated background Python service.
+
+## 🚀 Architecture Overview
+
+* **Deployment Runner**: GitHub Actions (Ubuntu Environment).
+* **Target Environment**: Microsoft Azure Virtual Machine running Ubuntu 24.04 LTS (Noble Numbat).
+* **Firewall Strategy**: Single-layer Network Security Group (NSG) mapped at the **Subnet Level**. The Virtual Machine relies entirely on the subnet's perimeter configuration (no local NIC-level NSG attached).
+* **Web Server Layer**: **Nginx** acting as a high-performance reverse proxy on public Port 80.
+* **Application Layer**: A persistent **Python 3 `http.server`** managed via systemd running locally on isolated Port 8000.
+
+---
+
+## 🛠️ Prerequisites & Azure Infrastructure Configuration
+
+### 1. Networking & Firewall (Subnet NSG)
+Because this project utilizes a perimeter subnet firewall design, ensure your **Subnet Network Security Group (NSG)** allows the following **Inbound Rules**:
+
+| Priority | Name | Port | Protocol | Source | Destination | Action |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 100 | `Allow-SSH` | `22` | TCP | `Internet` (or `GitHub` ranges) | Any | **Allow** |
+| 110 | `Allow-HTTP` | `80` | TCP | `Any` / `Internet` | Any | **Allow** |
+
+### 2. GitHub Repository Secrets
+To execute successfully, the pipeline requires authentication credentials. Navigate to **Settings** -> **Secrets and variables** -> **Actions** -> **Repository secrets** (do not use Environment Secrets unless explicitly scoped in the YAML) and configure the following variables:
+
+* `AZURE_VM_HOST`: The Public IP address of your Azure Virtual Machine.
+* `AZURE_VM_USERNAME`: The admin login username for your VM (e.g., `azureuser`).
+* `AZURE_VM_SSH_KEY`: The full, unedited multi-line OpenSSH Private Key (`.pem` format), including the `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----` strings.
+
+---
+
+## 📂 Project Structure
+
+```text
+├── .github/
+│   └── workflows/
+│       └── azure-deploy.yml    # GitHub Actions workflow configuration
+├── index.html                  # Main production website entrypoint (Root Directory)
+├── README.md                   # Project documentation
+└── [other project assets]
