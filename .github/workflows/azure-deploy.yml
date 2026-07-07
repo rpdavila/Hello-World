@@ -8,7 +8,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubunt
+    runs-on: ubuntu-latest
 
     steps:
       # Step 1: Check out the repository code
