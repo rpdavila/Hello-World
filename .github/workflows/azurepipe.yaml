@@ -1,0 +1,96 @@
+# GitHub Actions Workflow to Deploy Files and Configure Nginx Proxy to Python http.server
+name: Deploy to Azure VM
+
+on:
+  push:
+    branches:
+      - main  # Triggers the workflow on push events to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the repository code
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Step 2: Copy files to Azure VM using SSH/SCP
+      - name: Copy files via SSH/SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}          # The public IP address or FQDN of your Azure VM
+          username: ${{ secrets.AZURE_VM_USERNAME }}  # The admin username for the VM (e.g., azureuser)
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}        # The content of your private SSH key
+          port: 22                                    # SSH port (default is 22)
+          source: "."                                 # Copy everything from the repository root
+          target: "/home/${{ secrets.AZURE_VM_USERNAME }}/app" # The directory path on your Azure VM
+
+      # Step 3: Configure Python HTTP Server and Nginx Reverse Proxy
+      - name: Setup Web Server and Proxy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USERNAME }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          port: 22
+          script: |
+            # Ensure the app directory permissions are correct
+            cd /home/${{ secrets.AZURE_VM_USERNAME }}/app
+
+            # ===================================================
+            # 1. CREATE AND START BACKGROUND PYTHON HTTP SERVICE
+            # ===================================================
+            # Create a systemd service file to keep python http.server running persistently on port 8000
+            sudo bash -c "cat <<EOF > /etc/systemd/system/python-http-server.service
+            [Unit]
+            Description=Python HTTP Server
+            After=network.target
+
+            [Service]
+            User=${{ secrets.AZURE_VM_USERNAME }}
+            WorkingDirectory=/home/${{ secrets.AZURE_VM_USERNAME }}/app
+            ExecStart=/usr/bin/python3 -m http.server 8000
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF"
+
+            # Reload systemd to read the new service file
+            sudo systemctl daemon-reload
+            
+            # Enable the service to start automatically on VM boot, and restart it with the new files
+            sudo systemctl enable python-http-server.service
+            sudo systemctl restart python-http-server.service
+
+            # ===================================================
+            # 2. CONFIGURE NGINX REVERSE PROXY TO ACCES PORT 8000
+            # ===================================================
+            # Update apt and install Nginx if it isn't already installed
+            sudo apt-get update && sudo apt-get install -y nginx
+
+            # Overwrite Nginx's default site configuration to act as a proxy
+            # (Note: '\$host', '\$remote_addr', etc., are escaped so bash doesn't process them)
+            sudo bash -c "cat <<EOF > /etc/nginx/sites-available/default
+            server {
+                listen 80;
+                server_name _;
+
+                location / {
+                    proxy_pass http://127.0.0.1:8000;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            EOF"
+
+            # Test the Nginx configuration for syntax errors
+            sudo nginx -t
+
+            # Restart Nginx to apply the changes
+            sudo systemctl restart nginx
+            
+            echo "Deployment completed! Nginx is routing Port 80 traffic to Python on Port 8000."
