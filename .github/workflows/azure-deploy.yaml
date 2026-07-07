@@ -72,7 +72,7 @@ jobs:
 
             # Overwrite Nginx's default site configuration to act as a proxy
             # (Note: '\$host', '\$remote_addr', etc., are escaped so bash doesn't process them)
-            sudo bash -c "cat <<EOF > /etc/nginx/sites-available/default
+            sudo bash -c "cat << 'EOF' > /etc/nginx/sites-available/default
             server {
                 listen 80;
                 server_name _;
@@ -86,7 +86,8 @@ jobs:
                 }
             }
             EOF"
-
+            
+            sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
             # Test the Nginx configuration for syntax errors
             sudo nginx -t
 
