@@ -1,4 +1,4 @@
-# GitHub Actions Workflow to Deploy Files and Configure Nginx Proxy to Python http.server
+# GitHub Actions Workflow to Deploy Files and Configure Nginx Proxy to Python http.server yes
 name: Deploy to Azure VM
 
 on:
